@@ -18,7 +18,7 @@ pub(in crate::data::user) fn register_user(name: &str, email: &str, raw_password
     let _ = client.query_raw(
         "insert into users (id, name, email, register_date, password_hash, salt)\
         values (nextval('seq_user_id'), $1, $2, CURRENT_TIMESTAMP, $3, $4)",
-        &[name, email, password, salt],
+        &[name, email, &password, &salt],
     )?;
     Ok(())
 }

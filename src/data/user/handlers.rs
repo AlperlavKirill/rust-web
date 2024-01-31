@@ -1,5 +1,4 @@
 use crate::data::responses::{ALREADY_EXISTS, BAD_REQUEST, CREATED_RESPONSE, NOT_AUTHORIZED, NOT_FOUND, OK_RESPONSE};
-use crate::data::user;
 use crate::data::user::service;
 use crate::data::user::user::{UserLoginInfo, UserRegisterInfo};
 use crate::INTERNAL_SERVER_ERROR;
@@ -47,12 +46,12 @@ pub(crate) fn handle_login_request(request: &str) -> (String, String) {
             match service::user_email_exists(&email) {
                 Ok(exists) => {
                     if !exists {
-                        (NOT_AUTHORIZED.to_string(), "Email or password is incorrect".to_string());
+                        return (NOT_AUTHORIZED.to_string(), "Email or password is incorrect".to_string());
                     }
                 }
                 Err(e) => {
                     println!("Error checking whether email exists or not. {}", e);
-                    (INTERNAL_SERVER_ERROR.to_string(), "".to_string());
+                    return (INTERNAL_SERVER_ERROR.to_string(), "".to_string());
                 }
             }
             let raw_password = user.password;
@@ -82,9 +81,9 @@ pub fn handle_get_user_request(request: &str) -> (String, String) {
     match service::check_user_exists(id.to_string()) {
         Ok(exists) => {
             if !exists {
-                (NOT_FOUND.to_string(), "No such user".to_string())
+                return (NOT_FOUND.to_string(), "No such user".to_string());
             }
-            match user::service::get_user_public_info_from_db(id.to_string()) {
+            match service::get_user_public_info_from_db(id.to_string()) {
                 Ok(user_public_info) => {
                     let response = serde_json::to_string(&user_public_info).unwrap_or_default();
                     (OK_RESPONSE.to_string(), response.to_string())
@@ -107,9 +106,9 @@ pub fn handle_delete_user_request(request: &str) -> (String, String) {
     match service::check_user_exists(id.to_string()) {
         Ok(exists) => {
             if !exists {
-                (NOT_FOUND.to_string(), "No such user".to_string())
+                return (NOT_FOUND.to_string(), "No such user".to_string())
             }
-            match user::service::delete_user(id.to_string()) {
+            match service::delete_user(id.to_string()) {
                 Ok(_) => {
                     (OK_RESPONSE.to_string(), "user deleted".to_string())
                 }
@@ -141,28 +140,36 @@ pub fn handle_get_all_users_request(_request: &str) -> (String, String) {
 
 pub fn handle_update_user_request(request: &str) -> (String, String) {
     let id = get_user_id_from_request(request);
-    let user_data = get_user_register_data_from_request_body(request)?;
-    match service::check_user_exists(id.to_string()) {
-        Ok(exists) => {
-            if exists {
-                match service::update_user_info(id.to_string(), user_data.name, user_data.email, user_data.password) {
-                    Ok(_) => {
-                        (OK_RESPONSE.to_owned(), "user updated".to_string())
-                    }
-                    Err(err) => {
-                        println!("error updating user {}", err);
-                        (INTERNAL_SERVER_ERROR.to_string(), "".to_string())
+    match get_user_register_data_from_request_body(request) {
+        Ok(user_data) => {
+            match service::check_user_exists(id.to_string()) {
+                Ok(exists) => {
+                    if exists {
+                        match service::update_user_info(id.to_string(), user_data.name, user_data.email, user_data.password) {
+                            Ok(_) => {
+                                (OK_RESPONSE.to_owned(), "user updated".to_string())
+                            }
+                            Err(err) => {
+                                println!("error updating user {}", err);
+                                (INTERNAL_SERVER_ERROR.to_string(), "".to_string())
+                            }
+                        }
+                    } else {
+                        (NOT_FOUND.to_string(), "user not found".to_string())
                     }
                 }
-            } else {
-                (NOT_FOUND.to_string(), "user not found".to_string())
+                Err(err) => {
+                    println!("error checking if user exists {}", err);
+                    (INTERNAL_SERVER_ERROR.to_owned(), "Error".to_string())
+                }
             }
         }
         Err(err) => {
-            println!("error checking if user exists {}", err);
-            (INTERNAL_SERVER_ERROR.to_owned(), "Error".to_string())
+            println!("Error getting user from request body. {}", err);
+            (INTERNAL_SERVER_ERROR.to_string(), "".to_string())
         }
     }
+
 }
 
 fn get_user_id_from_request(request: &str) -> &str {
